@@ -42,6 +42,7 @@ import { Unit, AppState, MonthData, PillarData, ImportedBusinessUnit, ImportedCo
 import { auth, db } from './firebase';
 import { signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut, User } from 'firebase/auth';
 import { doc, setDoc, getDoc, onSnapshot } from 'firebase/firestore';
+import { CurrencyInput } from './components/CurrencyInput';
 
 // --- Utility Functions ---
 
@@ -1413,8 +1414,8 @@ function GoalsScreen({ customGoals, user, mesAtual, onSave, onBack }: { customGo
     });
   };
 
-  const handleMonthlyGoalChange = (pilar: string, type: string, ccName: string, monthIdx: number, value: string) => {
-    const numValue = parseFloat(value.replace(/[^0-9.]/g, '')) || 0;
+  const handleMonthlyGoalChange = (pilar: string, type: string, ccName: string, monthIdx: number, value: string | number) => {
+    const numValue = typeof value === 'number' ? value : (parseFloat(value.replace(/[^0-9.-]/g, '')) || 0);
     setLocalGoals((prev: any) => {
       const unitGoals = prev[selectedUnitId] || { eficiencia: { receita: {}, despesa: {} }, qualidade: {}, crescimento: { produtos: {} } };
       const pilarGoals = unitGoals[pilar] || {};
@@ -1539,13 +1540,21 @@ function GoalsScreen({ customGoals, user, mesAtual, onSave, onBack }: { customGo
                     </button>
                   </td>
                   <td className="px-4 py-3">
-                    <input 
-                      type="number"
-                      step={type === 'evasao' ? "0.1" : "1"}
-                      value={currentMonthVal}
-                      onChange={(e) => handleMonthlyGoalChange(pilar, type, item.nome, mesAtual, e.target.value)}
-                      className="w-full bg-white/50 border border-white/40 rounded-lg px-3 py-1.5 text-right text-xs font-mono focus:ring-2 focus:ring-azul/20 outline-none"
-                    />
+                    {isCurrency ? (
+                      <CurrencyInput
+                        value={currentMonthVal}
+                        onChange={(val) => handleMonthlyGoalChange(pilar, type, item.nome, mesAtual, val)}
+                        className="w-full bg-white/50 border border-white/40 rounded-lg px-3 py-1.5 text-right text-xs font-mono focus:ring-2 focus:ring-azul/20 outline-none"
+                      />
+                    ) : (
+                      <input 
+                        type="number"
+                        step={type === 'evasao' ? "0.1" : "1"}
+                        value={currentMonthVal}
+                        onChange={(e) => handleMonthlyGoalChange(pilar, type, item.nome, mesAtual, e.target.value)}
+                        className="w-full bg-white/50 border border-white/40 rounded-lg px-3 py-1.5 text-right text-xs font-mono focus:ring-2 focus:ring-azul/20 outline-none"
+                      />
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <div className="text-right text-xs font-mono text-texto-muted px-3 py-1.5">
@@ -1815,18 +1824,29 @@ function GoalsScreen({ customGoals, user, mesAtual, onSave, onBack }: { customGo
                   </button>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-6">
-                  {NOMES_MESES.map((mes, idx) => (
-                    <div key={idx} className="space-y-2">
-                      <label className="text-xs font-black text-texto-muted uppercase tracking-widest">{mes}</label>
-                      <input 
-                        type="number"
-                        step={editingCC.type === 'evasao' ? "0.1" : "1"}
-                        value={getMonthlyGoalValue(editingCC.pilar, editingCC.type, editingCC.name, idx, 0)}
-                        onChange={(e) => handleMonthlyGoalChange(editingCC.pilar, editingCC.type, editingCC.name, idx, e.target.value)}
-                        className="w-full bg-fundo/50 border border-black/5 rounded-xl px-4 py-2.5 text-sm font-mono focus:ring-2 focus:ring-azul/20 outline-none transition-all"
-                      />
-                    </div>
-                  ))}
+                  {NOMES_MESES.map((mes, idx) => {
+                    const isCurrency = editingCC.type === 'receita' || editingCC.type === 'despesa' || editingCC.type === 'produtos';
+                    return (
+                      <div key={idx} className="space-y-2">
+                        <label className="text-xs font-black text-texto-muted uppercase tracking-widest">{mes}</label>
+                        {isCurrency ? (
+                          <CurrencyInput
+                            value={getMonthlyGoalValue(editingCC.pilar, editingCC.type, editingCC.name, idx, 0)}
+                            onChange={(val) => handleMonthlyGoalChange(editingCC.pilar, editingCC.type, editingCC.name, idx, val)}
+                            className="w-full bg-fundo/50 border border-black/5 rounded-xl px-4 py-2.5 text-sm font-mono focus:ring-2 focus:ring-azul/20 outline-none transition-all"
+                          />
+                        ) : (
+                          <input 
+                            type="number"
+                            step={editingCC.type === 'evasao' ? "0.1" : "1"}
+                            value={getMonthlyGoalValue(editingCC.pilar, editingCC.type, editingCC.name, idx, 0)}
+                            onChange={(e) => handleMonthlyGoalChange(editingCC.pilar, editingCC.type, editingCC.name, idx, e.target.value)}
+                            className="w-full bg-fundo/50 border border-black/5 rounded-xl px-4 py-2.5 text-sm font-mono focus:ring-2 focus:ring-azul/20 outline-none transition-all"
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
                 
                 <div className="mt-10 p-6 bg-azul/5 rounded-2xl border border-azul/10 flex justify-between items-center">
