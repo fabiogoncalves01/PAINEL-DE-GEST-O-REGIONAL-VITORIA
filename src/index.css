@@ -1,0 +1,75 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-headline: "Manrope", sans-serif;
+
+  /* Cores principais */
+  --color-azul: #16419B;
+  --color-azul-dark: #0d2d6e;
+  --color-azul-mid: #1a52c4;
+  --color-azul-light: #e8eef8;
+
+  /* SESI — suporte verde */
+  --color-verde: #52ae32;
+  --color-verde-dark: #3d8224;
+  --color-verde-light: #eaf5e4;
+
+  /* SENAI — suporte laranja */
+  --color-laranja: #e84910;
+  --color-laranja-dark: #b83509;
+  --color-laranja-light: #fdeee9;
+
+  /* Semáforo */
+  --color-ok: #198754;
+  --color-atencao: #e6a817;
+  --color-critico: #c0392b;
+
+  /* Neutros */
+  --color-fundo: #eef1f7;
+  --color-card: #ffffff;
+  --color-texto: #1a2540;
+  --color-texto-muted: #5a6682;
+  --color-borda: #dde3ed;
+}
+
+@layer base {
+  body {
+    @apply bg-fundo text-texto font-sans;
+    background-image: 
+      radial-gradient(at 0% 0%, rgba(22, 65, 155, 0.05) 0px, transparent 50%),
+      radial-gradient(at 100% 0%, rgba(82, 174, 50, 0.03) 0px, transparent 50%);
+    background-attachment: fixed;
+  }
+}
+
+@layer components {
+  .glass-panel {
+    @apply bg-white/95 backdrop-blur-xl border border-white/60 shadow-sm transition-all;
+  }
+  
+  .glass-card {
+    @apply bg-white border border-borda shadow-md transition-all hover:shadow-lg hover:-translate-y-0.5;
+  }
+
+  .status-ok { @apply text-ok; }
+  .status-atencao { @apply text-atencao; }
+  .status-critico { @apply text-critico; }
+
+  .bg-ok { @apply bg-ok; }
+  .bg-atencao { @apply bg-atencao; }
+  .bg-critico { @apply bg-critico; }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-azul/10 rounded-full hover:bg-azul/20 transition-colors;
+}
+

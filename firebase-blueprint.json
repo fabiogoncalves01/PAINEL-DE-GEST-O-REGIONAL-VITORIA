@@ -1,0 +1,36 @@
+{
+  "entities": {
+    "CustomGoals": {
+      "title": "Custom Goals",
+      "description": "User-defined goals for units",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "User ID of the owner" },
+        "goals": { "type": "string", "description": "JSON stringified goals object" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "goals"]
+    },
+    "ImportedData": {
+      "title": "Imported Data",
+      "description": "Imported financial data for units",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "User ID of the owner" },
+        "data": { "type": "string", "description": "JSON stringified imported data object" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "data"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/customGoals/current": {
+      "schema": { "$ref": "#/entities/CustomGoals" },
+      "description": "Custom goals for a specific user"
+    },
+    "/users/{userId}/importedData/current": {
+      "schema": { "$ref": "#/entities/ImportedData" },
+      "description": "Imported data for a specific user"
+    }
+  }
+}
