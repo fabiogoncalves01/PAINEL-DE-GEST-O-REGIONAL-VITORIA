@@ -108,6 +108,14 @@ export interface CustomGoal {
   deleted?: boolean;
 }
 
+export interface ImportHistoryEntry {
+  id: string;
+  timestamp: string;
+  userEmail: string;
+  fileName: string;
+  data: Record<string, Record<number, ImportedBusinessUnit>>;
+}
+
 export interface AppState {
   telaAtiva: 1 | 2 | 3 | 4 | 5 | 6; // 4 for Import, 5 for Goals, 6 for History
   unidadeSelecionada: string | null;
@@ -119,6 +127,7 @@ export interface AppState {
   trimestreAtivo: 1 | 2 | 3 | 4;
   importedData: Record<string, Record<number, ImportedBusinessUnit>>; // Map of unitId to (Map of month to data)
   importedDataUpdatedAt?: string | null;
+  importHistory: ImportHistoryEntry[];
   customGoals: Record<string, { // unitId
     eficiencia: {
       receita: Record<string, CustomGoal>;

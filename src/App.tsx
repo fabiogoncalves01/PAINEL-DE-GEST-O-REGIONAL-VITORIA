@@ -45,35 +45,48 @@ import { doc, setDoc, getDoc, onSnapshot } from 'firebase/firestore';
 
 // --- Utility Functions ---
 
+const getCombinedList = (predefined: any[], unitGoals: any, pilar: string, type: string) => {
+  const customMap = unitGoals?.[pilar]?.[type] || {};
+  const list = [...predefined];
+  const predefinedNames = new Set(predefined.map(p => p.nome));
+  
+  Object.keys(customMap).forEach(name => {
+    if (!predefinedNames.has(name) && !customMap[name].deleted) {
+      list.push({ nome: name, metaMes: customMap[name].metaMes || 0, metaEvasao: customMap[name].metaMes || 5.0 });
+    }
+  });
+  
+  return list.filter(item => !customMap[item.nome]?.deleted);
+};
+
 const getEffectiveMeta = (unitId: string, pilarKey: string, mes: number, customGoals: any, indicator?: string) => {
   const unit = UNIDADES[unitId];
   if (!unit) return 0;
   const pilar = unit.pilares[pilarKey as keyof typeof unit.pilares];
   const dataMes = pilar.meses[mes];
   
-  const unitGoals = customGoals[unitId];
-  if (!unitGoals) return indicator === 'evasao' ? dataMes.metaEvasaoMes : dataMes.metaMes;
+  const unitGoals = customGoals[unitId] || {};
 
   if (pilarKey === 'eficiencia') {
     const efGoals = unitGoals.eficiencia || { receita: {}, despesa: {} };
     
     if (indicator === 'matriculas') {
-      const g = efGoals.matriculas;
+      const g = efGoals.matriculas?._root;
       return (g && g.metasMensais && g.metasMensais[mes] !== undefined) ? g.metasMensais[mes] : (g ? g.metaMes : dataMes.metaMatMes);
     }
     if (indicator === 'horaAluno') {
-      const g = efGoals.horaAluno;
+      const g = efGoals.horaAluno?._root;
       return (g && g.metasMensais && g.metasMensais[mes] !== undefined) ? g.metasMensais[mes] : (g ? g.metaMes : dataMes.metaHaMes);
     }
 
     const predefinedRevenue = pilar.centrosCusto?.receita || [];
-    let totalMeta = 0;
-    let hasCustom = false;
+    const combinedRevenue = getCombinedList(predefinedRevenue, unitGoals, 'eficiencia', 'receita');
     
-    predefinedRevenue.forEach(ecc => {
-      const customGoal = efGoals.receita[ecc.nome];
+    let totalMeta = 0;
+    
+    combinedRevenue.forEach(ecc => {
+      const customGoal = efGoals.receita?.[ecc.nome];
       if (customGoal) {
-        hasCustom = true;
         const metaMesCC = (customGoal.metasMensais && customGoal.metasMensais[mes] !== undefined) 
           ? customGoal.metasMensais[mes] 
           : customGoal.metaMes;
@@ -83,17 +96,19 @@ const getEffectiveMeta = (unitId: string, pilarKey: string, mes: number, customG
       }
     });
     
-    return hasCustom ? totalMeta : dataMes.metaMes;
+    return totalMeta;
   }
 
   if (pilarKey === 'qualidade' && indicator === 'evasao') {
     const qGoals = unitGoals.qualidade || {};
     const evasaoGoals = qGoals.evasao || {};
     const predefinedModalidades = pilar.modalidades || [{ nome: 'Evasão de Matrícula', metaEvasao: 5.0 }];
+    const combinedModalidades = getCombinedList(predefinedModalidades, unitGoals, 'qualidade', 'evasao');
+    
     let totalMeta = 0;
     let count = 0;
     
-    predefinedModalidades.forEach(m => {
+    combinedModalidades.forEach(m => {
       const g = evasaoGoals[m.nome];
       if (g) {
         totalMeta += (g.metasMensais && g.metasMensais[mes] !== undefined) ? g.metasMensais[mes] : g.metaMes;
@@ -109,13 +124,13 @@ const getEffectiveMeta = (unitId: string, pilarKey: string, mes: number, customG
   if (pilarKey === 'crescimento') {
     const cGoals = unitGoals.crescimento || { produtos: {} };
     const predefinedProducts = pilar.produtos || [];
+    const combinedProducts = getCombinedList(predefinedProducts, unitGoals, 'crescimento', 'produtos');
+    
     let totalMeta = 0;
-    let hasCustom = false;
 
-    predefinedProducts.forEach(p => {
-      const customGoal = cGoals.produtos[p.nome];
+    combinedProducts.forEach(p => {
+      const customGoal = cGoals.produtos?.[p.nome];
       if (customGoal) {
-        hasCustom = true;
         const metaM = (customGoal.metasMensais && customGoal.metasMensais[mes] !== undefined)
           ? customGoal.metasMensais[mes]
           : customGoal.metaMes;
@@ -124,7 +139,7 @@ const getEffectiveMeta = (unitId: string, pilarKey: string, mes: number, customG
         totalMeta += p.metaMes;
       }
     });
-    return hasCustom ? totalMeta : dataMes.metaMes;
+    return totalMeta;
   }
   
   return dataMes.metaMes;
@@ -249,6 +264,7 @@ export default function App() {
     anoAtual: new Date().getFullYear(),
     trimestreAtivo: calcularTrimestre(new Date().getMonth()),
     importedData: {},
+    importHistory: [],
     customGoals: INITIAL_CUSTOM_GOALS,
   });
 
@@ -282,8 +298,9 @@ export default function App() {
       if (doc.exists()) {
         try {
           const data = JSON.parse(doc.data().data);
+          const history = doc.data().history ? JSON.parse(doc.data().history) : [];
           const updatedAt = doc.data().updatedAt;
-          setState(prev => ({ ...prev, importedData: data, importedDataUpdatedAt: updatedAt }));
+          setState(prev => ({ ...prev, importedData: data, importHistory: history, importedDataUpdatedAt: updatedAt }));
         } catch (e) {
           console.error("Error parsing imported data:", e);
         }
@@ -309,7 +326,7 @@ export default function App() {
   const handleLogout = async () => {
     try {
       await signOut(auth);
-      setState(prev => ({ ...prev, importedData: {}, customGoals: INITIAL_CUSTOM_GOALS }));
+      setState(prev => ({ ...prev, importedData: {}, importHistory: [], customGoals: INITIAL_CUSTOM_GOALS }));
     } catch (error) {
       console.error("Logout error:", error);
     }
@@ -330,12 +347,13 @@ export default function App() {
     }
   };
 
-  const saveImportedDataToFirebase = async (data: any) => {
+  const saveImportedDataToFirebase = async (data: any, history: any[]) => {
     if (!user) return;
     try {
       await setDoc(doc(db, 'users', user.uid, 'importedData', 'current'), {
         uid: user.uid,
         data: JSON.stringify(data),
+        history: JSON.stringify(history),
         updatedAt: new Date().toISOString()
       });
     } catch (error) {
@@ -368,7 +386,7 @@ export default function App() {
         const ws = wb.Sheets[wsname];
         const data = XLSX.utils.sheet_to_json(ws) as any[];
 
-        const newImportedData = { ...state.importedData };
+        const newImportedData: Record<string, Record<number, ImportedBusinessUnit>> = {};
 
         data.forEach((row) => {
         // A. Detecção de Mês
@@ -601,9 +619,25 @@ export default function App() {
       });
 
         setState(prev => {
-          const newState = { ...prev, importedData: newImportedData };
+          const newHistoryEntry = {
+            id: Date.now().toString(),
+            timestamp: new Date().toISOString(),
+            userEmail: user?.email || 'Usuário Desconhecido',
+            fileName: file.name,
+            data: prev.importedData
+          };
+          
+          // Keep only last 5 history entries to avoid hitting Firestore limits
+          const newHistory = [newHistoryEntry, ...prev.importHistory].slice(0, 5);
+          
+          const newState = { 
+            ...prev, 
+            importedData: newImportedData,
+            importHistory: newHistory
+          };
+          
           if (user) {
-            saveImportedDataToFirebase(newImportedData);
+            saveImportedDataToFirebase(newImportedData, newHistory);
           }
           return newState;
         });
@@ -1157,6 +1191,64 @@ export default function App() {
                 />
               </motion.div>
             )}
+
+            {state.telaAtiva === 6 && (
+              <motion.div 
+                key="tela6"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="max-w-5xl mx-auto"
+              >
+                <div className="flex items-center gap-4 mb-8">
+                  <button onClick={() => irParaTela(1)} className="p-2 hover:bg-white/60 rounded-full transition-colors">
+                    <ArrowLeft size={24} className="text-azul" />
+                  </button>
+                  <div>
+                    <h2 className="text-3xl font-headline font-black text-azul tracking-tight">Histórico Regional</h2>
+                    <p className="text-texto-muted font-medium mt-1">Histórico de importações de planilhas</p>
+                  </div>
+                </div>
+
+                <div className="glass-card rounded-3xl p-8 border border-white/40 shadow-xl">
+                  {state.importHistory && state.importHistory.length > 0 ? (
+                    <div className="space-y-6">
+                      {state.importHistory.map((entry, idx) => (
+                        <div key={entry.id} className="bg-white/40 p-6 rounded-2xl border border-white/60 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                          <div className="flex items-start gap-4">
+                            <div className="w-12 h-12 bg-azul/10 rounded-xl flex items-center justify-center text-azul shrink-0">
+                              <FileSpreadsheet size={24} />
+                            </div>
+                            <div>
+                              <h4 className="font-bold text-texto">{entry.fileName}</h4>
+                              <p className="text-sm text-texto-muted mt-1">
+                                Importado por: <span className="font-medium text-azul">{entry.userEmail}</span>
+                              </p>
+                              <p className="text-xs text-texto-muted mt-1">
+                                {new Date(entry.timestamp).toLocaleString('pt-BR')}
+                              </p>
+                            </div>
+                          </div>
+                          {idx === 0 && (
+                            <span className="bg-verde/10 text-verde px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest border border-verde/20">
+                              Atual
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-12">
+                      <div className="w-20 h-20 bg-black/5 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <History size={32} className="text-texto-muted" />
+                      </div>
+                      <h3 className="text-lg font-bold text-texto mb-2">Nenhum histórico encontrado</h3>
+                      <p className="text-texto-muted">As importações de planilhas aparecerão aqui.</p>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
           </AnimatePresence>
         </main>
       </div>
@@ -1237,25 +1329,11 @@ function GoalsScreen({ customGoals, user, mesAtual, onSave, onBack }: { customGo
 
   const unit = UNIDADES[selectedUnitId];
   const unitGoals = localGoals[selectedUnitId] || {};
-  
-  const getCombinedList = (predefined: any[], pilar: string, type: string) => {
-    const customMap = unitGoals[pilar]?.[type] || {};
-    const list = [...predefined];
-    const predefinedNames = new Set(predefined.map(p => p.nome));
-    
-    Object.keys(customMap).forEach(name => {
-      if (!predefinedNames.has(name) && !customMap[name].deleted) {
-        list.push({ nome: name, metaMes: customMap[name].metaMes || 0 });
-      }
-    });
-    
-    return list.filter(item => !customMap[item.nome]?.deleted);
-  };
 
-  const revenueList = getCombinedList(unit.pilares.eficiencia.centrosCusto?.receita || [], 'eficiencia', 'receita');
-  const expenseList = getCombinedList(unit.pilares.eficiencia.centrosCusto?.despesa || [], 'eficiencia', 'despesa');
-  const productsList = getCombinedList(unit.pilares.crescimento.produtos || [], 'crescimento', 'produtos');
-  const modalidadesList = getCombinedList(unit.pilares.qualidade?.modalidades || [{ nome: 'Evasão de Matrícula', metaEvasao: 5.0 }], 'qualidade', 'evasao');
+  const revenueList = getCombinedList(unit.pilares.eficiencia.centrosCusto?.receita || [], unitGoals, 'eficiencia', 'receita');
+  const expenseList = getCombinedList(unit.pilares.eficiencia.centrosCusto?.despesa || [], unitGoals, 'eficiencia', 'despesa');
+  const productsList = getCombinedList(unit.pilares.crescimento.produtos || [], unitGoals, 'crescimento', 'produtos');
+  const modalidadesList = getCombinedList(unit.pilares.qualidade?.modalidades || [{ nome: 'Evasão de Matrícula', metaEvasao: 5.0 }], unitGoals, 'qualidade', 'evasao');
 
   const handleAddCC = (pilar: string, type: string) => {
     if (!newCCName.trim()) return;
@@ -2364,8 +2442,11 @@ function DetailView({ unit, pilarKey, mesInicio, mesFim, filtroModo, trim, impor
     const predefinedRevenue = pilar.centrosCusto?.receita || [];
     const predefinedExpense = pilar.centrosCusto?.despesa || [];
     
+    const combinedRevenue = getCombinedList(predefinedRevenue, unitGoals, 'eficiencia', 'receita');
+    const combinedExpense = getCombinedList(predefinedExpense, unitGoals, 'eficiencia', 'despesa');
+    
     // Mapeia Receitas Agregadas
-    const revenueData = predefinedRevenue.map(ecc => {
+    const revenueData = combinedRevenue.map(ecc => {
       let realizadoPeriodo = 0;
       let metaPeriodo = 0;
       let acumuladoAteFim = 0;
@@ -2446,7 +2527,7 @@ function DetailView({ unit, pilarKey, mesInicio, mesFim, filtroModo, trim, impor
       });
 
       allImportedCCNames.forEach(ccName => {
-        const isPredefined = predefinedRevenue.some(ecc => 
+        const isPredefined = combinedRevenue.some(ecc => 
           ecc.nome.toLowerCase().includes(ccName.toLowerCase()) || 
           ccName.toLowerCase().includes(ecc.nome.toLowerCase())
         );
@@ -2497,7 +2578,7 @@ function DetailView({ unit, pilarKey, mesInicio, mesFim, filtroModo, trim, impor
     }
 
     // Mapeia Despesas Agregadas
-    const expenseData = predefinedExpense.map(ecc => {
+    const expenseData = combinedExpense.map(ecc => {
       let realizadoPeriodo = 0;
       let metaPeriodo = 0;
       let acumuladoAteFim = 0;
@@ -2575,7 +2656,7 @@ function DetailView({ unit, pilarKey, mesInicio, mesFim, filtroModo, trim, impor
       });
 
       allImportedCCNames.forEach(ccName => {
-        const isPredefined = predefinedExpense.some(ecc => 
+        const isPredefined = combinedExpense.some(ecc => 
           ecc.nome.toLowerCase().includes(ccName.toLowerCase()) || 
           ccName.toLowerCase().includes(ecc.nome.toLowerCase())
         );
