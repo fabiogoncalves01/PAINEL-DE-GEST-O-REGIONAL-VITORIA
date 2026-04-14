@@ -281,9 +281,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!isAuthReady || !user) return;
-
-    const unsubGoals = onSnapshot(doc(db, 'users', user.uid, 'customGoals', 'current'), (doc) => {
+    const unsubGoals = onSnapshot(doc(db, 'appData', 'customGoals'), (doc) => {
       if (doc.exists()) {
         try {
           const data = JSON.parse(doc.data().goals);
@@ -295,7 +293,7 @@ export default function App() {
       }
     });
 
-    const unsubImported = onSnapshot(doc(db, 'users', user.uid, 'importedData', 'current'), (doc) => {
+    const unsubImported = onSnapshot(doc(db, 'appData', 'importedData'), (doc) => {
       if (doc.exists()) {
         try {
           const data = JSON.parse(doc.data().data);
@@ -312,7 +310,7 @@ export default function App() {
       unsubGoals();
       unsubImported();
     };
-  }, [user, isAuthReady]);
+  }, []);
 
   const handleLogin = async () => {
     try {
@@ -327,19 +325,22 @@ export default function App() {
   const handleLogout = async () => {
     try {
       await signOut(auth);
-      setState(prev => ({ ...prev, importedData: {}, importHistory: [], customGoals: INITIAL_CUSTOM_GOALS }));
+      // We no longer clear data on logout since it's global
     } catch (error) {
       console.error("Logout error:", error);
     }
   };
 
   const saveGoalsToFirebase = async (goals: any) => {
-    if (!user) return;
+    if (!user) {
+      showToast("Você precisa fazer login para salvar metas.", "error");
+      return;
+    }
     try {
-      await setDoc(doc(db, 'users', user.uid, 'customGoals', 'current'), {
-        uid: user.uid,
+      await setDoc(doc(db, 'appData', 'customGoals'), {
         goals: JSON.stringify(goals),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
+        updatedBy: user.email || 'Usuário Desconhecido'
       });
       showToast("Metas salvas com sucesso!", "success");
     } catch (error) {
@@ -349,13 +350,16 @@ export default function App() {
   };
 
   const saveImportedDataToFirebase = async (data: any, history: any[]) => {
-    if (!user) return;
+    if (!user) {
+      showToast("Você precisa fazer login para importar dados.", "error");
+      return;
+    }
     try {
-      await setDoc(doc(db, 'users', user.uid, 'importedData', 'current'), {
-        uid: user.uid,
+      await setDoc(doc(db, 'appData', 'importedData'), {
         data: JSON.stringify(data),
         history: JSON.stringify(history),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
+        updatedBy: user.email || 'Usuário Desconhecido'
       });
     } catch (error) {
       console.error("Error saving imported data:", error);
